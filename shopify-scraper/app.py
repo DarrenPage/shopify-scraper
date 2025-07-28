@@ -477,8 +477,8 @@ def create_tables():
         db.create_all()
 
 if __name__ == '__main__':
-    # Get port from environment variable for deployment
     import os
+    # Get port from environment variable for deployment
     port = int(os.environ.get('PORT', 5000))
     
     # Create database tables
@@ -487,7 +487,3 @@ if __name__ == '__main__':
     
     # Run the app
     app.run(debug=False, host='0.0.0.0', port=port)
-        db.create_all()
-    
-    # Run the app
-    app.run(debug=True, host='0.0.0.0', port=5000)
