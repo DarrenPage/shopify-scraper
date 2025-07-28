@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Product Scraper to Shopify</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+            color: white;
+            padding: 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            font-weight: 800;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .input-section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .input-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+        
+        input[type="url"], textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+        
+        input[type="url"]:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 15px;
+            margin-bottom: 15px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+        }
+        
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+        }
+        
+        .btn-success:hover {
+            box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+        }
+        
+        .btn-danger:hover {
+            box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+        }
+        
+        .progress-section {
+            display: none;
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 5px solid #3498db;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .progress-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .progress-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 12px;
+            background: #ecf0f1;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2980b9);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 6px;
+        }
+        
+        .current-url {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-top: 10px;
+            word-break: break-all;
+        }
+        
+        .results-section {
+            margin-top: 30px;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .results-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        
+        .results-count {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .product-card {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .product-image {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background: #f8f9fa;
+        }
+        
+        .product-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        
+        .product-price {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #27ae60;
+            margin-bottom: 10px;
+        }
+        
+        .product-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .detail-item {
+            font-size: 0.85rem;
+        }
+        
+        .detail-label {
+            color: #7f8c8d;
+            font-weight: 500;
+        }
+        
+        .detail-value {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .product-description {
+            font-size: 0.9rem;
+            color: #5a6c7d;
+            line-height: 1.4;
+            margin-top: 10px;
+        }
+        
+        .status {
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .export-section {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 30px;
+            display: none;
+        }
+        
+        .export-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        .export-description {
+            color: #7f8c8d;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .job-history {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 30px;
+        }
+        
+        .job-history h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+        
+        .job-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .job-info {
+            flex: 1;
+        }
+        
+        .job-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .job-status.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .job-status.running {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .job-status.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(30px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0);
+            }
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .loading-content {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-content">
+            <div class="spinner" style="width: 40px; height: 40px; margin-bottom: 20px;"></div>
+            <h3>Initializing Scraper...</h3>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>🚀 Professional Product Scraper</h1>
+                <p>Scrape product data from Best4Systems and export to Shopify-ready spreadsheet</p>
+            </div>
+            
+            <div class="content">
+                <div class="input-section">
+                    <div class="input-group">
+                        <label for="singleUrl">🔗 Single Product URL:</label>
+                        <input type="url" id="singleUrl" placeholder="https://www.best4systems.co.uk/product-name.html">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="multipleUrls">📋 Multiple URLs (one per line):</label>
+                        <textarea id="multipleUrls" placeholder="https://www.best4systems.co.uk/product1.html
+https://www.best4systems.co.uk/product2.html
+https://www.best4systems.co.uk/product3.html"></textarea>
+                    </div>
+                    
+                    <button id="scrapeBtn" class="btn pulse">
+                        <span>🚀 Start Professional Scraping</span>
+                    </button>
+                    
+                    <button id="clearBtn" class="btn btn-danger">
+                        <span>🗑️ Clear All</span>
+                    </button>
+                </div>
+                
+                <div class="progress-section" id="progressSection">
+                    <div class="progress-header">
+                        <div class="progress-title">🔄 Scraping in Progress</div>
+                        <div class="progress-stats">
+                            <span id="progressStats">0 of 0 completed</span>
+                            <span id="failedStats">0 failed</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="current-url" id="currentUrl">Preparing to start...</div>
+                </div>
+                
+                <div id="statusContainer"></div>
+                
+                <div class="results-section" id="resultsSection" style="display: none;">
+                    <div class="results-header">
+                        <div class="results-title">📦 Scraped Products</div>
+                        <div class="results-count" id="resultsCount">0 products</div>
+                    </div>
+                    <div class="product-grid" id="productGrid"></div>
+                </div>
+                
+                <div class="export-section" id="exportSection">
+                    <div class="export-title">📊 Export to Shopify</div>
+                    <div class="export-description">
+                        Your products are ready! Download the Shopify-compatible CSV file and import it directly into your store.
+                    </div>
+                    <button id="exportBtn" class="btn btn-success">
+                        <span>📥 Download Shopify Import File</span>
+                    </button>
+                </div>
+                
+                <div class="job-history" id="jobHistory" style="display: none;">
+                    <h3>📈 Recent Scraping Jobs</h3>
+                    <div id="jobList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ProfessionalScraper {
+            constructor() {
+                this.currentJobId = null;
+                this.statusCheckInterval = null;
+                this.apiBase = window.location.origin;
+                this.initializeEventListeners();
+                this.loadJobHistory();
+                this.hideLoadingOverlay();
+            }
+            
+            initializeEventListeners() {
+                document.getElementById('scrapeBtn').addEventListener('click', () => this.startScraping());
+                document.getElementById('clearBtn').addEventListener('click', () => this.clearAll());
+                document.getElementById('exportBtn').addEventListener('click', () => this.exportToShopify());
+            }
+            
+            hideLoadingOverlay() {
+                setTimeout(() => {
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                }, 1000);
+            }
+            
+            async startScraping() {
+                const singleUrl = document.getElementById('singleUrl').value.trim();
+                const multipleUrls = document.getElementById('multipleUrls').value.trim();
+                
+                let urls = [];
+                
+                if (singleUrl) {
+                    urls.push(singleUrl);
+                }
+                
+                if (multipleUrls) {
+                    const urlList = multipleUrls.split('\n')
+                        .map(url => url.trim())
+                        .filter(url => url && this.isValidUrl(url));
+                    urls = urls.concat(urlList);
+                }
+                
+                if (urls.length === 0) {
+                    this.showStatus('❌ Please enter at least one valid URL', 'error');
+                    return;
+                }
+                
+                // Validate URLs are from best4systems.co.uk
+                const invalidUrls = urls.filter(url => !url.includes('best4systems.co.uk'));
+                if (invalidUrls.length > 0) {
+                    this.showStatus('⚠️ This scraper is optimized for best4systems.co.uk URLs', 'warning');
+                }
+                
+                await this.submitScrapingJob(urls);
+            }
+            
+            isValidUrl(string) {
+                try {
+                    new URL(string);
+                    return true;
+                } catch (_) {
+                    return false;
+                }
+            }
+            
+            async submitScrapingJob(urls) {
+                const scrapeBtn = document.getElementById('scrapeBtn');
+                
+                try {
+                    scrapeBtn.disabled = true;
+                    scrapeBtn.innerHTML = '<span class="spinner"></span> Starting...';
+                    
+                    const response = await fetch(`${this.apiBase}/api/scrape`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ urls: urls })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.currentJobId = data.job_id;
+                        this.showProgressSection();
+                        this.startStatusChecking();
+                        this.showStatus(`🎯 Started scraping ${data.total_urls} products`, 'success');
+                    } else {
+                        throw new Error(data.error || 'Failed to start scraping');
+                    }
+                    
+                } catch (error) {
+                    this.showStatus(`❌ Error: ${error.message}`, 'error');
+                    scrapeBtn.disabled = false;
+                    scrapeBtn.innerHTML = '<span>🚀 Start Professional Scraping</span>';
+                }
+            }
+            
+            showProgressSection() {
+                document.getElementById('progressSection').style.display = 'block';
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('exportSection').style.display = 'none';
+            }
+            
+            startStatusChecking() {
+                if (this.statusCheckInterval) {
+                    clearInterval(this.statusCheckInterval);
+                }
+                
+                this.statusCheckInterval = setInterval(() => {
+                    this.checkJobStatus();
+                }, 2000); // Check every 2 seconds
+                
+                // Initial check
+                this.checkJobStatus();
+            }
+            
+            async checkJobStatus() {
+                if (!this.currentJobId) return;
+                
+                try {
+                    const response = await fetch(`${this.apiBase}/api/job/${this.currentJobId}/status`);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.updateProgress(data);
+                        
+                        if (data.status === 'completed') {
+                            this.onScrapingCompleted();
+                        } else if (data.status === 'failed') {
+                            this.onScrapingFailed(data.error_message);
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error checking job status:', error);
+                }
+            }
+            
+            updateProgress(jobData) {
+                const progressFill = document.getElementById('progressFill');
+                const progressStats = document.getElementById('progressStats');
+                const failedStats = document.getElementById('failedStats');
+                const currentUrl = document.getElementById('currentUrl');
+                
+                progressFill.style.width = `${jobData.progress}%`;
+                progressStats.textContent = `${jobData.completed_urls} of ${jobData.total_urls} completed`;
+                failedStats.textContent = `${jobData.failed_urls} failed`;
+                
+                if (jobData.current_url) {
+                    currentUrl.textContent = `Currently scraping: ${jobData.current_url}`;
+                }
+            }
+            
+            async onScrapingCompleted() {
+                clearInterval(this.statusCheckInterval);
+                
+                const scrapeBtn = document.getElementById('scrapeBtn');
+                scrapeBtn.disabled = false;
+                scrapeBtn.innerHTML = '<span>🚀 Start Professional Scraping</span>';
+                
+                this.showStatus('🎉 Scraping completed successfully!', 'success');
+                
+                // Load and display results
+                await this.loadScrapingResults();
+                this.loadJobHistory();
+            }
+            
+            onScrapingFailed(errorMessage) {
+                clearInterval(this.statusCheckInterval);
+                
+                const scrapeBtn = document.getElementById('scrapeBtn');
+                scrapeBtn.disabled = false;
+                scrapeBtn.innerHTML = '<span>🚀 Start Professional Scraping</span>';
+                
+                this.showStatus(`❌ Scraping failed: ${errorMessage}`, 'error');
+            }
+            
+            async loadScrapingResults() {
+                if (!this.currentJobId) return;
+                
+                try {
+                    const response = await fetch(`${this.apiBase}/api/job/${this.currentJobId}/products`);
+                    const data = await response.json();
+                    
+                    if (response.ok && data.products.length > 0) {
+                        this.displayResults(data.products);
+                    } else {
+                        this.showStatus('⚠️ No products were successfully scraped', 'warning');
+                    }
+                    
+                } catch (error) {
+                    console.error('Error loading results:', error);
+                }
+            }
+            
+            displayResults(products) {
+                const resultsSection = document.getElementById('resultsSection');
+                const resultsCount = document.getElementById('resultsCount');
+                const productGrid = document.getElementById('productGrid');
+                const exportSection = document.getElementById('exportSection');
+                
+                resultsSection.style.display = 'block';
+                exportSection.style.display = 'block';
+                
+                resultsCount.textContent = `${products.length} products`;
+                productGrid.innerHTML = '';
+                
+                products.forEach((product, index) => {
+                    const productCard = document.createElement('div');
+                    productCard.className = 'product-card fade-in';
+                    productCard.style.animationDelay = `${index * 0.1}s`;
+                    
+                    productCard.innerHTML = `
+                        ${product.image_url ? `<img src="${product.image_url}" alt="${product.title || 'Product'}" class="product-image" onerror="this.style.display='none'">` : ''}
+                        <div class="product-title">${product.title || 'Untitled Product'}</div>
+                        <div class="product-price">${product.price || 'Price not available'}</div>
+                        <div class="product-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Part Number:</div>
+                                <div class="detail-value">${product.part_number || 'N/A'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Brand:</div>
+                                <div class="detail-value">${product.brand || 'N/A'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Color:</div>
+                                <div class="detail-value">${product.color || 'N/A'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">EAN:</div>
+                                <div class="detail-value">${product.ean || 'N/A'}</div>
+                            </div>
+                        </div>
+                        <div class="product-description">
+                            ${product.description ? (product.description.length > 150 ? product.description.substring(0, 150) + '...' : product.description) : 'No description available'}
+                        </div>
+                    `;
+                    
+                    productGrid.appendChild(productCard);
+                });
+                
+                // Hide progress section
+                document.getElementById('progressSection').style.display = 'none';
+            }
+            
+            async exportToShopify() {
+                if (!this.currentJobId) {
+                    this.showStatus('❌ No scraping job to export', 'error');
+                    return;
+                }
+                
+                const exportBtn = document.getElementById('exportBtn');
+                exportBtn.disabled = true;
+                exportBtn.innerHTML = '<span class="spinner"></span> Generating Export...';
+                
+                try {
+                    const response = await fetch(`${this.apiBase}/api/job/${this.currentJobId}/export/shopify`);
+                    
+                    if (response.ok) {
+                        // Create blob and download
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `shopify_products_${new Date().toISOString().split('T')[0]}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                        
+                        this.showStatus('📥 Shopify import file downloaded successfully!', 'success');
+                    } else {
+                        throw new Error('Export failed');
+                    }
+                    
+                } catch (error) {
+                    this.showStatus(`❌ Export failed: ${error.message}`, 'error');
+                } finally {
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = '<span>📥 Download Shopify Import File</span>';
+                }
+            }
+            
+            async loadJobHistory() {
+                try {
+                    const response = await fetch(`${this.apiBase}/api/jobs`);
+                    const data = await response.json();
+                    
+                    if (response.ok && data.jobs.length > 0) {
+                        this.displayJobHistory(data.jobs);
+                    }
+                    
+                } catch (error) {
+                    console.log('Could not load job history:', error);
+                }
+            }
+            
+            displayJobHistory(jobs) {
+                const jobHistory = document.getElementById('jobHistory');
+                const jobList = document.getElementById('jobList');
+                
+                jobHistory.style.display = 'block';
+                jobList.innerHTML = '';
+                
+                jobs.slice(0, 5).forEach(job => {
+                    const jobItem = document.createElement('div');
+                    jobItem.className = 'job-item';
+                    
+                    const createdDate = new Date(job.created_at).toLocaleDateString();
+                    const createdTime = new Date(job.created_at).toLocaleTimeString();
+                    
+                    jobItem.innerHTML = `
+                        <div class="job-info">
+                            <strong>${job.total_urls} products</strong> - ${createdDate} at ${createdTime}
+                            <br><small>${job.completed_urls} completed, ${job.failed_urls} failed</small>
+                        </div>
+                        <div class="job-status ${job.status}">${job.status}</div>
+                    `;
+                    
+                    jobList.appendChild(jobItem);
+                });
+            }
+            
+            clearAll() {
+                document.getElementById('singleUrl').value = '';
+                document.getElementById('multipleUrls').value = '';
+                document.getElementById('statusContainer').innerHTML = '';
+                document.getElementById('resultsSection').style.display = 'none';
+                document.getElementById('exportSection').style.display = 'none';
+                document.getElementById('progressSection').style.display = 'none';
+                
+                if (this.statusCheckInterval) {
+                    clearInterval(this.statusCheckInterval);
+                }
+                
+                this.currentJobId = null;
+                this.showStatus('🗑️ All data cleared!', 'info');
+            }
+            
+            showStatus(message, type = 'info') {
+                const statusContainer = document.getElementById('statusContainer');
+                const statusElement = document.createElement('div');
+                statusElement.className = `status ${type} fade-in`;
+                
+                const icons = {
+                    success: '✅',
+                    error: '❌',
+                    warning: '⚠️',
+                    info: 'ℹ️'
+                };
+                
+                statusElement.innerHTML = `
+                    <span>${icons[type] || 'ℹ️'}</span>
+                    <span>${message}</span>
+                `;
+                
+                statusContainer.appendChild(statusElement);
+                statusContainer.scrollTop = statusContainer.scrollHeight;
+                
+                // Auto-remove success messages after 5 seconds
+                if (type === 'success' || type === 'info') {
+                    setTimeout(() => {
+                        if (statusElement.parentNode) {
+                            statusElement.remove();
+                        }
+                    }, 5000);
+                }
+            }
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new ProfessionalScraper();
+        });
+    </script>
+</body>
+</html>
