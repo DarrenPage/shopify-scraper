@@ -1,4 +1,4 @@
-# app.py - Universal E-commerce Product Scraper
+# app.py - Fixed Universal E-commerce Product Scraper with Better Encoding
 import os
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -81,7 +81,7 @@ class UniversalProductScraper:
         })
     
     def scrape_product(self, url):
-        """Universal product scraper with anti-bot protection"""
+        """Universal product scraper with better encoding handling"""
         try:
             logger.info(f"Universal scraping: {url}")
             
@@ -92,7 +92,10 @@ class UniversalProductScraper:
             response = self.session.get(url, timeout=20, allow_redirects=True)
             response.raise_for_status()
             
-            soup = BeautifulSoup(response.content, 'html.parser')
+            # Fix encoding issues
+            response.encoding = response.apparent_encoding or 'utf-8'
+            
+            soup = BeautifulSoup(response.content, 'html.parser', from_encoding='utf-8')
             product_data = self.extract_product_data(soup, url)
             
             # Longer delay after successful scrape
@@ -102,247 +105,206 @@ class UniversalProductScraper:
         except Exception as e:
             logger.error(f"Error scraping {url}: {str(e)}")
             return None
-    
+
     def extract_product_data(self, soup, url):
-        """Universal extraction method for multiple e-commerce sites"""
+        """Fixed extraction with better encoding and debug info"""
         product = {'source_url': url}
         
-        # Get all text from the page
-        page_text = soup.get_text()
+        # Get page text with better encoding handling
+        try:
+            page_text = soup.get_text(separator=' ', strip=True)
+        except:
+            page_text = str(soup.get_text())
         
-        # Extract title from page title tag
+        # Clean up encoding issues
+        page_text = page_text.encode('utf-8', errors='ignore').decode('utf-8')
+        
+        logger.info(f"=== DEBUG INFO FOR {url} ===")
+        logger.info(f"Page text length: {len(page_text)}")
+        logger.info(f"First 500 chars: {repr(page_text[:500])}")
+        
+        # TITLE EXTRACTION - Multiple methods
+        title = None
+        
+        # Method 1: Page title tag
         title_tag = soup.find('title')
         if title_tag:
             title = title_tag.get_text(strip=True)
-            # Clean up common suffixes
+            logger.info(f"Found title tag: {repr(title)}")
+        
+        # Method 2: H1 tags
+        if not title:
+            h1_tags = soup.find_all('h1')
+            for h1 in h1_tags:
+                h1_text = h1.get_text(strip=True)
+                if h1_text and len(h1_text) > 5:
+                    title = h1_text
+                    logger.info(f"Found H1 title: {repr(title)}")
+                    break
+        
+        # Method 3: Product name selectors
+        if not title:
+            selectors = ['.product-name', '.product-title', '.entry-title', '[data-testid="product-title"]']
+            for selector in selectors:
+                element = soup.select_one(selector)
+                if element:
+                    title = element.get_text(strip=True)
+                    logger.info(f"Found title with selector {selector}: {repr(title)}")
+                    break
+        
+        if title:
+            # Clean up title
             for suffix in [' - Best4Systems', ' | Best4Systems', ' - PMC Telecom', ' - Headset Store']:
                 title = re.sub(re.escape(suffix) + r'.*$', '', title, flags=re.IGNORECASE)
-            if title and len(title) > 5:
-                product['title'] = title.strip()
+            product['title'] = title.strip()
+            logger.info(f"Final title: {repr(product['title'])}")
         
-        # UNIVERSAL PART NUMBER EXTRACTION
-        # Different sites use different terms for part numbers
-        part_number_patterns = [
-            # Best4Systems format: "Manufacturer Part # | 1001138"
-            r'Manufacturer Part #\s*[\|\:]\s*([^\|\n\r]+)',
-            r'Part Number\s*[\|\:]\s*([^\|\n\r]+)',
-            r'Product Code\s*[\|\:]\s*([^\|\n\r]+)',
-            
-            # PMC/Headset Store format: "Plantronics part number: 89435-02"
-            r'part number[\:\s]+([A-Z0-9\-]+)',
-            r'product code[\:\s]+([A-Z0-9\-]+)',
-            r'model number[\:\s]+([A-Z0-9\-]+)',
-            r'item code[\:\s]+([A-Z0-9\-]+)',
-            
-            # Generic formats
-            r'MPN[\s\:]+([A-Z0-9\-]+)',
-            r'SKU[\s\:]+([A-Z0-9\-]+)',
-            r'Model[\s\:]+([A-Z0-9\-]+)',
-            
-            # Manufacturer specific
-            r'Plantronics part number[\:\s]+([A-Z0-9\-]+)',
-            r'Jabra part number[\:\s]+([A-Z0-9\-]+)',
-            r'EPOS part number[\:\s]+([A-Z0-9\-]+)',
-            r'Sennheiser part number[\:\s]+([A-Z0-9\-]+)',
-            
-            # Alternative formats
-            r"Manufacturer's Product Code[\s\:]+([A-Z0-9\-]+)",
-            r'MPN NO[\s\:]+([A-Z0-9\-]+)',
+        # PART NUMBER EXTRACTION - Look for specific patterns
+        logger.info("=== LOOKING FOR PART NUMBERS ===")
+        
+        # Look for "part number: XXXXX" pattern specifically
+        part_patterns = [
+            r'part number[:\s]+([A-Z0-9\-]+)',
+            r'product code[:\s]+([A-Z0-9\-]+)',
+            r'model[:\s]+([A-Z0-9\-]+)',
+            r'MPN[:\s]+([A-Z0-9\-]+)',
+            r'SKU[:\s]+([A-Z0-9\-]+)',
         ]
         
-        for pattern in part_number_patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
-                part_num = match.group(1).strip()
-                # Validate it looks like a part number (has letters/numbers, reasonable length)
-                if part_num and re.match(r'^[A-Z0-9\-]{3,20}$', part_num, re.IGNORECASE):
-                    product['part_number'] = part_num
-                    logger.info(f"Found part number: {part_num}")
-                    break
-        
-        # UNIVERSAL PRICE EXTRACTION
-        price_patterns = [
-            # UK currency formats
-            r'£\s*([\d,]+\.?\d*)',
-            r'GBP\s*([\d,]+\.?\d*)',
-            r'Price[\s\:]*£\s*([\d,]+\.?\d*)',
-            r'Cost[\s\:]*£\s*([\d,]+\.?\d*)',
-            
-            # US currency (for international sites)
-            r'\$\s*([\d,]+\.?\d*)',
-            r'USD\s*([\d,]+\.?\d*)',
-            
-            # Euro currency
-            r'€\s*([\d,]+\.?\d*)',
-            r'EUR\s*([\d,]+\.?\d*)',
-        ]
-        
-        for pattern in price_patterns:
-            match = re.search(pattern, page_text)
-            if match:
-                price_num = match.group(1).replace(',', '')
-                try:
-                    price_float = float(price_num)
-                    if 1 <= price_float <= 50000:  # Reasonable price range
-                        currency = '£' if '£' in pattern or 'GBP' in pattern else ('$' if '$' in pattern else '€')
-                        product['price'] = f"{currency}{price_num}"
-                        logger.info(f"Found price: {product['price']}")
+        for pattern in part_patterns:
+            matches = re.findall(pattern, page_text, re.IGNORECASE)
+            if matches:
+                logger.info(f"Pattern '{pattern}' found: {matches}")
+                for match in matches:
+                    if 3 <= len(match) <= 20:  # Reasonable length
+                        product['part_number'] = match
+                        logger.info(f"Using part number: {match}")
                         break
-                except:
-                    continue
-        
-        # UNIVERSAL EAN/BARCODE EXTRACTION
-        ean_patterns = [
-            r'EAN[\s\|\:]+(\d{12,14})',
-            r'Barcode[\s\|\:]+(\d{12,14})',
-            r'UPC[\s\|\:]+(\d{12,14})',
-            r'GTIN[\s\|\:]+(\d{12,14})',
-        ]
-        
-        for pattern in ean_patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
-                ean = match.group(1).strip()
-                if ean.isdigit() and 12 <= len(ean) <= 14:
-                    product['ean'] = ean
-                    logger.info(f"Found EAN: {ean}")
+                if 'part_number' in product:
                     break
         
-        # UNIVERSAL BRAND EXTRACTION
-        # First try from title
+        # If no part number found, look for likely candidates
+        if 'part_number' not in product:
+            potential_parts = re.findall(r'\b[A-Z]{2,}[0-9\-]{2,}\b', page_text)
+            if potential_parts:
+                logger.info(f"Potential part numbers: {potential_parts[:5]}")
+                product['part_number'] = potential_parts[0]
+        
+        # BRAND EXTRACTION
+        logger.info("=== LOOKING FOR BRANDS ===")
+        
+        # First check title for known brands
         if 'title' in product:
             title_lower = product['title'].lower()
-            brands = [
-                'plantronics', 'poly', 'epos', 'sennheiser', 'jabra', 'logitech', 
-                'cisco', 'yealink', 'grandstream', 'fanvil', 'avaya', 'mitel',
-                'microsoft', 'teams', 'zoom', 'project telecom'
-            ]
+            brands = ['plantronics', 'poly', 'epos', 'sennheiser', 'jabra', 'logitech', 'project telecom', 'cisco', 'yealink']
             for brand in brands:
                 if brand in title_lower:
                     product['brand'] = brand.title()
-                    logger.info(f"Found brand from title: {product['brand']}")
+                    logger.info(f"Found brand in title: {brand}")
                     break
         
-        # Try brand patterns in text
+        # Check page text for brand patterns
         if 'brand' not in product:
-            brand_patterns = [
-                r'Brand[\s\|\:]+([A-Za-z\s]+)',
-                r'Manufacturer[\s\|\:]+([A-Za-z\s]+)',
-                r'Made by[\s\|\:]+([A-Za-z\s]+)',
-            ]
+            brand_lines = []
+            lines = page_text.split('\n')
+            for line in lines:
+                if any(word in line.lower() for word in ['brand', 'manufacturer', 'made by']):
+                    brand_lines.append(line.strip())
             
-            for pattern in brand_patterns:
-                match = re.search(pattern, page_text, re.IGNORECASE)
-                if match:
-                    brand = match.group(1).strip()
-                    if brand and len(brand) < 30:
-                        product['brand'] = brand
-                        logger.info(f"Found brand from pattern: {brand}")
-                        break
+            if brand_lines:
+                logger.info(f"Brand-related lines: {brand_lines[:3]}")
         
-        # UNIVERSAL COLOR EXTRACTION
-        color_patterns = [
-            r'Colour[\s\|\:]+([A-Za-z\s]+)',
-            r'Color[\s\|\:]+([A-Za-z\s]+)',
-            r'Finish[\s\|\:]+([A-Za-z\s]+)',
+        # PRICE EXTRACTION (already working, but let's improve it)
+        logger.info("=== LOOKING FOR PRICES ===")
+        price_patterns = [
+            r'£\s*([\d,]+\.?\d*)',
+            r'\$\s*([\d,]+\.?\d*)',
+            r'€\s*([\d,]+\.?\d*)',
+            r'GBP\s*([\d,]+\.?\d*)',
+            r'USD\s*([\d,]+\.?\d*)',
         ]
         
-        for pattern in color_patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
-                color = match.group(1).strip()
-                if color and len(color) < 30 and not any(word in color.lower() for word in ['description', 'features', 'specification']):
-                    product['color'] = color
-                    logger.info(f"Found color: {color}")
+        for pattern in price_patterns:
+            matches = re.findall(pattern, page_text)
+            if matches:
+                logger.info(f"Price pattern '{pattern}' found: {matches}")
+                for match in matches:
+                    try:
+                        price_float = float(match.replace(',', ''))
+                        if 1 <= price_float <= 10000:  # Reasonable range
+                            currency = '£' if '£' in pattern else ('$' if '$' in pattern else '€')
+                            product['price'] = f"{currency}{match}"
+                            logger.info(f"Using price: {product['price']}")
+                            break
+                    except:
+                        continue
+                if 'price' in product:
                     break
-        
-        # UNIVERSAL CONDITION EXTRACTION
-        condition_patterns = [
-            r'Condition[\s\|\:]+([A-Za-z\s]+)',
-            r'State[\s\|\:]+([A-Za-z\s]+)',
-            r'Quality[\s\|\:]+([A-Za-z\s]+)',
-        ]
-        
-        for pattern in condition_patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
-                condition = match.group(1).strip()
-                if condition and len(condition) < 20:
-                    product['condition'] = condition
-                    logger.info(f"Found condition: {condition}")
-                    break
-        
-        # Extract features from bullet points
-        features = []
-        
-        # Look for bullet points or dashes
-        lines = page_text.split('\n')
-        for line in lines:
-            line = line.strip()
-            if (line.startswith('-') or line.startswith('•') or line.startswith('*')):
-                feature = line[1:].strip()
-                if 20 < len(feature) < 150:  # Reasonable feature length
-                    features.append(feature)
-        
-        if features:
-            product['features'] = ' | '.join(features[:8])  # Limit to 8 features
-            logger.info(f"Found {len(features)} features")
         
         # DESCRIPTION EXTRACTION
-        # Look for the main product description (usually longer text blocks)
-        paragraphs = soup.find_all(['p', 'div'])
-        descriptions = []
+        logger.info("=== LOOKING FOR DESCRIPTIONS ===")
         
-        for para in paragraphs:
-            text = para.get_text(strip=True)
-            # Look for substantial paragraphs that look like descriptions
-            if (50 < len(text) < 1000 and 
-                not any(word in text.lower() for word in ['cookie', 'privacy', 'delivery', 'return', 'policy', 'contact', 'about us'])):
-                descriptions.append(text)
+        # Look for description in meta tags
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        if meta_desc and meta_desc.get('content'):
+            desc = meta_desc.get('content').strip()
+            if len(desc) > 20:
+                product['description'] = desc
+                logger.info(f"Found meta description: {desc[:100]}")
         
-        if descriptions:
-            # Use the longest description
-            product['description'] = max(descriptions, key=len)[:800]
-            logger.info(f"Found description: {len(product['description'])} characters")
-        elif 'title' in product:
-            # Fallback description from title
-            product['description'] = f"Professional {product['title']} - High quality communication device with advanced features."
-        
-        # IMAGE EXTRACTION
-        img_tags = soup.find_all('img')
-        images = []
-        
-        for img in img_tags:
-            src = img.get('src', '') or img.get('data-src', '')
-            alt = img.get('alt', '').lower()
+        # Look for product descriptions in common containers
+        if 'description' not in product:
+            desc_selectors = [
+                '.product-description', '.description', '.product-details', 
+                '.product-info', '.entry-content', '[data-testid="description"]'
+            ]
             
-            # Look for product images
-            if src and any(keyword in src.lower() for keyword in ['product', 'item', 'image', 'photo']):
-                if src.startswith('//'):
-                    src = 'https:' + src
-                elif src.startswith('/'):
-                    src = urljoin(url, src)
-                
-                # Filter out tiny images and icons
-                if not any(size in src for size in ['16x16', '32x32', '50x50']) and src not in images:
-                    images.append(src)
+            for selector in desc_selectors:
+                elements = soup.select(selector)
+                for element in elements:
+                    desc = element.get_text(strip=True)
+                    if 50 < len(desc) < 1000:
+                        product['description'] = desc[:500]  # Limit length
+                        logger.info(f"Found description with {selector}: {desc[:100]}")
+                        break
+                if 'description' in product:
+                    break
         
-        if images:
-            product['image_url'] = images[0]
-            logger.info(f"Found {len(images)} product images")
+        # Look for paragraph descriptions
+        if 'description' not in product:
+            paragraphs = soup.find_all('p')
+            for para in paragraphs:
+                desc = para.get_text(strip=True)
+                if (100 < len(desc) < 800 and 
+                    not any(word in desc.lower() for word in ['cookie', 'privacy', 'delivery', 'return'])):
+                    product['description'] = desc
+                    logger.info(f"Found paragraph description: {desc[:100]}")
+                    break
         
-        # Set default availability
-        availability_keywords = ['in stock', 'available', 'ships', 'delivery']
-        if any(keyword in page_text.lower() for keyword in availability_keywords):
-            product['availability'] = 'In Stock'
-        else:
-            product['availability'] = 'Available'
+        # Set defaults if nothing found
+        if 'title' not in product:
+            # Extract from URL as fallback
+            url_parts = url.split('/')
+            for part in reversed(url_parts):
+                if part and len(part) > 5 and '-' in part:
+                    title = part.replace('-', ' ').replace('.html', '').title()
+                    product['title'] = title
+                    logger.info(f"Generated title from URL: {title}")
+                    break
+            
+            if 'title' not in product:
+                product['title'] = f"Product from {url.split('//')[-1].split('/')[0]}"
         
-        # Debug logging
-        logger.info(f"=== UNIVERSAL EXTRACTION RESULTS FOR {url} ===")
+        if 'description' not in product:
+            product['description'] = f"Professional {product.get('title', 'product')} with advanced features."
+        
+        product['availability'] = 'Available'
+        
+        # FINAL DEBUG OUTPUT
+        logger.info(f"=== FINAL EXTRACTION RESULTS FOR {url} ===")
         for key, value in product.items():
             if key != 'source_url':
-                display_value = str(value)[:100] + ('...' if len(str(value)) > 100 else '')
+                display_value = str(value)[:150] + ('...' if len(str(value)) > 150 else '')
                 logger.info(f"{key.title()}: {display_value}")
         logger.info("=== END EXTRACTION RESULTS ===")
         
