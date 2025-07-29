@@ -1,4 +1,4 @@
-# app.py - Complete Updated Flask Application with Fixed Best4Systems Scraping
+# app.py - Complete Flask Application with Aggressive Best4Systems Scraping
 import os
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -85,227 +85,171 @@ class ProductScraper:
             return None
     
     def extract_product_data(self, soup, url):
-        """Extract product data from BeautifulSoup object - Updated for Best4Systems"""
+        """Super aggressive extraction specifically for Best4Systems"""
         product = {'source_url': url}
         
-        # Extract title - try multiple approaches
-        title_selectors = [
-            'title',  # Page title tag
-            'h1',     # Main heading
-            '.page-title',
-            '.product-title',
-            '.product-name',
-            '[data-ui-id="page-title-wrapper"]'
+        # Get all text from the page
+        page_text = soup.get_text()
+        
+        # Extract title from page title tag
+        title_tag = soup.find('title')
+        if title_tag:
+            title = title_tag.get_text(strip=True)
+            # Clean up title
+            title = re.sub(r'\s*-\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
+            title = re.sub(r'\s*\|\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
+            if title and len(title) > 5:
+                product['title'] = title
+        
+        # Look for specific patterns in the page text
+        # Best4Systems uses pipe-separated tables like: "Manufacturer Part # | 1001138"
+        
+        # Find part number
+        part_patterns = [
+            r'Manufacturer Part #\s*\|\s*([^\|\n]+)',
+            r'Part Number\s*\|\s*([^\|\n]+)', 
+            r'Model\s*\|\s*([^\|\n]+)',
+            r'Part #\s*:?\s*([A-Z0-9]+)',
+            r'SKU\s*:?\s*([A-Z0-9]+)'
         ]
         
-        for selector in title_selectors:
-            element = soup.select_one(selector)
-            if element:
-                title = element.get_text(strip=True)
-                # Clean up title (remove " - Best4Systems" etc.)
-                title = re.sub(r'\s*-\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
-                title = re.sub(r'\s*\|\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
-                if title and len(title) > 5:
-                    product['title'] = title
+        for pattern in part_patterns:
+            match = re.search(pattern, page_text, re.IGNORECASE)
+            if match:
+                part_num = match.group(1).strip()
+                if part_num and any(char.isdigit() for char in part_num):
+                    product['part_number'] = part_num
                     break
         
-        # Extract price - Best4Systems specific
-        price_selectors = [
-            '.price',
-            '.regular-price .price',
-            '.price-final_price .price',
-            '.product-price-value',
-            '[data-price-type="finalPrice"]',
-            '.price-wrapper .price',
-            '.product-price .price',
-            'span[id*="price"]',
-            '.price-box .price'
+        # Find EAN
+        ean_patterns = [
+            r'EAN\s*\|\s*([^\|\n]+)',
+            r'EAN\s*:?\s*(\d{12,14})',
+            r'Barcode\s*:?\s*(\d{12,14})'
         ]
         
-        for selector in price_selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                price_text = element.get_text(strip=True)
-                # Look for £ symbol and numbers
-                price_match = re.search(r'£\s*([\d,]+\.?\d*)', price_text)
-                if price_match:
-                    product['price'] = f"£{price_match.group(1)}"
-                    break
-            if 'price' in product:
-                break
-        
-        # If no price found with £, look for just numbers in page text
-        if 'price' not in product:
-            all_text = soup.get_text()
-            price_patterns = [
-                r'£\s*([\d,]+\.?\d*)',
-                r'Price:\s*£?\s*([\d,]+\.?\d*)',
-                r'Cost:\s*£?\s*([\d,]+\.?\d*)',
-                r'\b([\d,]+\.?\d+)\s*GBP\b'
-            ]
-            for pattern in price_patterns:
-                match = re.search(pattern, all_text)
-                if match:
-                    price_num = match.group(1)
-                    product['price'] = f"£{price_num}"
+        for pattern in ean_patterns:
+            match = re.search(pattern, page_text, re.IGNORECASE)
+            if match:
+                ean = match.group(1).strip()
+                if ean.isdigit() and len(ean) >= 12:
+                    product['ean'] = ean
                     break
         
-        # Extract description - look in multiple places
-        desc_selectors = [
-            '.product-description',
-            '.product-info-description',
-            '.product-collateral',
-            '.product-details',
-            '.description',
-            '.product-overview',
-            '.product-info .value'
+        # Find colour
+        colour_patterns = [
+            r'Colour\s*\|\s*([^\|\n]+)',
+            r'Color\s*\|\s*([^\|\n]+)',
+            r'Colour\s*:?\s*([A-Za-z\s]+)'
         ]
         
-        descriptions = []
-        for selector in desc_selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                desc = element.get_text(strip=True)
-                if desc and len(desc) > 30 and desc not in descriptions:
-                    descriptions.append(desc)
+        for pattern in colour_patterns:
+            match = re.search(pattern, page_text, re.IGNORECASE)
+            if match:
+                colour = match.group(1).strip()
+                if colour and len(colour) < 50:
+                    product['color'] = colour
+                    break
         
-        if descriptions:
-            # Take the longest description
-            product['description'] = max(descriptions, key=len)[:1000]
+        # Find condition
+        condition_patterns = [
+            r'Condition\s*\|\s*([^\|\n]+)',
+            r'Condition\s*:?\s*([A-Za-z\s]+)'
+        ]
         
-        # Extract specifications from tables - Best4Systems uses tables
-        tables = soup.select('table')
-        for table in tables:
-            rows = table.select('tr')
-            for row in rows:
-                cells = row.select('td, th')
-                if len(cells) >= 2:
-                    key_text = cells[0].get_text(strip=True).lower()
-                    value_text = cells[1].get_text(strip=True)
-                    
-                    if value_text and len(value_text) > 0:
-                        # Map common fields
-                        if any(keyword in key_text for keyword in ['part', 'model', 'item']):
-                            if any(char.isdigit() for char in value_text):
-                                product['part_number'] = value_text
-                        elif 'ean' in key_text or 'barcode' in key_text:
-                            product['ean'] = value_text
-                        elif 'colour' in key_text or 'color' in key_text:
-                            product['color'] = value_text
-                        elif 'condition' in key_text:
-                            product['condition'] = value_text
-                        elif 'brand' in key_text or 'manufacturer' in key_text:
-                            product['brand'] = value_text
-                        elif 'weight' in key_text:
-                            product['weight'] = value_text
-                        elif 'warranty' in key_text:
-                            product['warranty'] = value_text
+        for pattern in condition_patterns:
+            match = re.search(pattern, page_text, re.IGNORECASE)
+            if match:
+                condition = match.group(1).strip()
+                if condition and len(condition) < 20:
+                    product['condition'] = condition
+                    break
         
-        # Alternative approach for specifications - look for definition lists
-        dt_elements = soup.select('dt')
-        for dt in dt_elements:
-            dd = dt.find_next_sibling('dd')
-            if dd:
-                key = dt.get_text(strip=True).lower()
-                value = dd.get_text(strip=True)
-                
-                if value:
-                    if 'part' in key and any(char.isdigit() for char in value):
-                        product['part_number'] = value
-                    elif 'ean' in key:
-                        product['ean'] = value
-                    elif 'brand' in key:
-                        product['brand'] = value
-        
-        # Extract brand from title if not found elsewhere
-        if 'brand' not in product and 'title' in product:
-            title = product['title'].lower()
-            common_brands = ['epos', 'sennheiser', 'jabra', 'plantronics', 'logitech', 'cisco', 'yealink', 'poly']
-            for brand in common_brands:
-                if brand in title:
+        # Find brand from title
+        if 'title' in product:
+            title_lower = product['title'].lower()
+            brands = ['epos', 'sennheiser', 'jabra', 'plantronics', 'logitech', 'poly', 'cisco', 'yealink']
+            for brand in brands:
+                if brand in title_lower:
                     product['brand'] = brand.upper()
                     break
         
-        # Extract features from lists
-        feature_selectors = [
-            '.product-features li',
-            '.features li', 
-            '.product-specs li',
-            '.specifications li',
-            'ul li'
+        # Find price (Best4Systems might load prices via JS, so this might not work)
+        price_patterns = [
+            r'£\s*([\d,]+\.?\d*)',
+            r'Price\s*:?\s*£\s*([\d,]+\.?\d*)',
+            r'Cost\s*:?\s*£\s*([\d,]+\.?\d*)',
+            r'\b([\d,]+\.?\d+)\s*GBP\b'
         ]
         
-        features = []
-        for selector in feature_selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                feature = element.get_text(strip=True)
-                # Filter for meaningful features
-                if (feature and 
-                    len(feature) > 15 and 
-                    len(feature) < 200 and
-                    not any(word in feature.lower() for word in ['cookie', 'privacy', 'terms', 'delivery', 'return'])):
-                    features.append(feature)
+        for pattern in price_patterns:
+            match = re.search(pattern, page_text)
+            if match:
+                price = match.group(1).replace(',', '')
+                try:
+                    # Validate it's a reasonable price (between £1 and £10000)
+                    price_float = float(price)
+                    if 1 <= price_float <= 10000:
+                        product['price'] = f"£{price}"
+                        break
+                except:
+                    continue
         
-        if features:
-            product['features'] = ' | '.join(features[:8])  # Limit to 8 features
-        
-        # Extract images - multiple approaches
-        img_selectors = [
-            '.product-image img',
-            '.product-media img',
-            '.gallery img',
-            '.product-photo img',
-            'img[src*="product"]',
-            'img[alt*="product"]',
-            '.main-image img'
+        # Look for description in various places
+        desc_patterns = [
+            r'product[_-]?description[^>]*>([^<]+)',
+            r'description[^>]*>([^<]+)',
         ]
         
+        html_content = str(soup)
+        for pattern in desc_patterns:
+            match = re.search(pattern, html_content, re.IGNORECASE)
+            if match:
+                desc = match.group(1).strip()
+                if len(desc) > 20:
+                    product['description'] = desc[:500]
+                    break
+        
+        # If no description found, use title as description
+        if 'description' not in product and 'title' in product:
+            product['description'] = f"Professional {product['title']} - High quality communication device."
+        
+        # Set default availability
+        product['availability'] = 'Available'
+        
+        # Look for images
+        img_tags = soup.find_all('img')
         images = []
-        for selector in img_selectors:
-            img_elements = soup.select(selector)
-            for img in img_elements:
-                src = img.get('src') or img.get('data-src') or img.get('data-lazy')
-                if src and not src.startswith('data:'):
-                    # Convert relative URLs to absolute
-                    if src.startswith('//'):
-                        src = 'https:' + src
-                    elif src.startswith('/'):
-                        src = urljoin(url, src)
-                    
-                    # Filter out small icons and logos
-                    if ('product' in src.lower() or 
-                        'media' in src.lower() or
-                        any(dim in src for dim in ['200', '300', '400', '500', '600'])):
-                        if src not in images:
-                            images.append(src)
+        for img in img_tags:
+            src = img.get('src', '')
+            if src and 'product' in src.lower():
+                if src.startswith('//'):
+                    src = 'https:' + src
+                elif src.startswith('/'):
+                    src = urljoin(url, src)
+                if src not in images:
+                    images.append(src)
         
         if images:
             product['image_url'] = images[0]
-            if len(images) > 1:
-                product['additional_images'] = ' | '.join(images[1:4])
         
-        # Set availability based on stock status
-        stock_indicators = soup.select('.stock, .availability, .in-stock, .out-of-stock')
-        for indicator in stock_indicators:
-            stock_text = indicator.get_text(strip=True).lower()
-            if 'in stock' in stock_text or 'available' in stock_text:
-                product['availability'] = 'In Stock'
-                break
-            elif 'out of stock' in stock_text or 'unavailable' in stock_text:
-                product['availability'] = 'Out of Stock'
-                break
+        # Debug logging - this will show in Render logs
+        logger.info(f"=== EXTRACTION RESULTS FOR {url} ===")
+        logger.info(f"Title: {product.get('title', 'NOT FOUND')}")
+        logger.info(f"Part Number: {product.get('part_number', 'NOT FOUND')}")
+        logger.info(f"EAN: {product.get('ean', 'NOT FOUND')}")
+        logger.info(f"Brand: {product.get('brand', 'NOT FOUND')}")
+        logger.info(f"Color: {product.get('color', 'NOT FOUND')}")
+        logger.info(f"Condition: {product.get('condition', 'NOT FOUND')}")
+        logger.info(f"Price: {product.get('price', 'NOT FOUND')}")
+        logger.info(f"Description: {product.get('description', 'NOT FOUND')[:100]}...")
+        logger.info("=== END EXTRACTION RESULTS ===")
         
-        # Default availability if not found
-        if 'availability' not in product:
-            product['availability'] = 'Available'
+        # Check if we found ANY useful data
+        useful_fields = ['title', 'part_number', 'ean', 'brand', 'color', 'condition']
+        found_fields = [field for field in useful_fields if field in product and product[field]]
         
-        # Log what we found for debugging
-        logger.info(f"Extracted data for {url}:")
-        logger.info(f"  Title: {product.get('title', 'NOT FOUND')}")
-        logger.info(f"  Price: {product.get('price', 'NOT FOUND')}")
-        logger.info(f"  Part Number: {product.get('part_number', 'NOT FOUND')}")
-        logger.info(f"  Brand: {product.get('brand', 'NOT FOUND')}")
+        logger.info(f"Found {len(found_fields)} useful fields: {found_fields}")
         
         return product
 
