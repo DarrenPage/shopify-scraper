@@ -1,4 +1,4 @@
-# app.py - Complete Fixed Flask Application for Shopify Product Scraper
+# app.py - Complete Updated Flask Application with Fixed Best4Systems Scraping
 import os
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -85,98 +85,154 @@ class ProductScraper:
             return None
     
     def extract_product_data(self, soup, url):
-        """Extract product data from BeautifulSoup object"""
+        """Extract product data from BeautifulSoup object - Updated for Best4Systems"""
         product = {'source_url': url}
         
-        # Extract title
+        # Extract title - try multiple approaches
         title_selectors = [
-            'h1.page-title',
-            'h1',
-            '.page-title h1',
-            '.product-name h1',
+            'title',  # Page title tag
+            'h1',     # Main heading
+            '.page-title',
             '.product-title',
-            'title'
+            '.product-name',
+            '[data-ui-id="page-title-wrapper"]'
         ]
         
         for selector in title_selectors:
             element = soup.select_one(selector)
             if element:
                 title = element.get_text(strip=True)
-                if title and len(title) > 5:  # Ensure it's a meaningful title
+                # Clean up title (remove " - Best4Systems" etc.)
+                title = re.sub(r'\s*-\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\s*\|\s*Best4Systems.*$', '', title, flags=re.IGNORECASE)
+                if title and len(title) > 5:
                     product['title'] = title
                     break
         
-        # Extract price
+        # Extract price - Best4Systems specific
         price_selectors = [
             '.price',
-            '.regular-price',
-            '.price-box .price',
-            '.product-price',
-            '[data-price-amount]',
-            '.price-current',
-            '.current-price'
+            '.regular-price .price',
+            '.price-final_price .price',
+            '.product-price-value',
+            '[data-price-type="finalPrice"]',
+            '.price-wrapper .price',
+            '.product-price .price',
+            'span[id*="price"]',
+            '.price-box .price'
         ]
         
         for selector in price_selectors:
-            element = soup.select_one(selector)
-            if element:
+            elements = soup.select(selector)
+            for element in elements:
                 price_text = element.get_text(strip=True)
-                price_match = re.search(r'£([\d,]+\.?\d*)', price_text)
+                # Look for £ symbol and numbers
+                price_match = re.search(r'£\s*([\d,]+\.?\d*)', price_text)
                 if price_match:
                     product['price'] = f"£{price_match.group(1)}"
                     break
-                elif price_text and any(char.isdigit() for char in price_text):
-                    product['price'] = price_text
+            if 'price' in product:
+                break
+        
+        # If no price found with £, look for just numbers in page text
+        if 'price' not in product:
+            all_text = soup.get_text()
+            price_patterns = [
+                r'£\s*([\d,]+\.?\d*)',
+                r'Price:\s*£?\s*([\d,]+\.?\d*)',
+                r'Cost:\s*£?\s*([\d,]+\.?\d*)',
+                r'\b([\d,]+\.?\d+)\s*GBP\b'
+            ]
+            for pattern in price_patterns:
+                match = re.search(pattern, all_text)
+                if match:
+                    price_num = match.group(1)
+                    product['price'] = f"£{price_num}"
                     break
         
-        # Extract description
+        # Extract description - look in multiple places
         desc_selectors = [
             '.product-description',
-            '.short-description',
-            '.product-collateral .std',
-            '.product-info-main .description',
+            '.product-info-description',
+            '.product-collateral',
+            '.product-details',
             '.description',
-            '.product-details'
+            '.product-overview',
+            '.product-info .value'
         ]
         
+        descriptions = []
         for selector in desc_selectors:
-            element = soup.select_one(selector)
-            if element:
+            elements = soup.select(selector)
+            for element in elements:
                 desc = element.get_text(strip=True)
-                if desc and len(desc) > 20:  # Ensure meaningful description
-                    product['description'] = desc[:1000]  # Limit length
-                    break
+                if desc and len(desc) > 30 and desc not in descriptions:
+                    descriptions.append(desc)
         
-        # Extract specifications from tables
+        if descriptions:
+            # Take the longest description
+            product['description'] = max(descriptions, key=len)[:1000]
+        
+        # Extract specifications from tables - Best4Systems uses tables
         tables = soup.select('table')
         for table in tables:
             rows = table.select('tr')
             for row in rows:
                 cells = row.select('td, th')
                 if len(cells) >= 2:
-                    key = cells[0].get_text(strip=True).lower()
-                    value = cells[1].get_text(strip=True)
+                    key_text = cells[0].get_text(strip=True).lower()
+                    value_text = cells[1].get_text(strip=True)
                     
-                    if value:  # Only process if value exists
-                        if ('part' in key and '#' in key) or 'part number' in key:
-                            product['part_number'] = value
-                        elif 'ean' in key:
-                            product['ean'] = value
-                        elif 'colour' in key or 'color' in key:
-                            product['color'] = value
-                        elif 'condition' in key:
-                            product['condition'] = value
-                        elif 'brand' in key or 'manufacturer' in key:
-                            product['brand'] = value
-                        elif 'availability' in key or 'stock' in key:
-                            product['availability'] = value
+                    if value_text and len(value_text) > 0:
+                        # Map common fields
+                        if any(keyword in key_text for keyword in ['part', 'model', 'item']):
+                            if any(char.isdigit() for char in value_text):
+                                product['part_number'] = value_text
+                        elif 'ean' in key_text or 'barcode' in key_text:
+                            product['ean'] = value_text
+                        elif 'colour' in key_text or 'color' in key_text:
+                            product['color'] = value_text
+                        elif 'condition' in key_text:
+                            product['condition'] = value_text
+                        elif 'brand' in key_text or 'manufacturer' in key_text:
+                            product['brand'] = value_text
+                        elif 'weight' in key_text:
+                            product['weight'] = value_text
+                        elif 'warranty' in key_text:
+                            product['warranty'] = value_text
+        
+        # Alternative approach for specifications - look for definition lists
+        dt_elements = soup.select('dt')
+        for dt in dt_elements:
+            dd = dt.find_next_sibling('dd')
+            if dd:
+                key = dt.get_text(strip=True).lower()
+                value = dd.get_text(strip=True)
+                
+                if value:
+                    if 'part' in key and any(char.isdigit() for char in value):
+                        product['part_number'] = value
+                    elif 'ean' in key:
+                        product['ean'] = value
+                    elif 'brand' in key:
+                        product['brand'] = value
+        
+        # Extract brand from title if not found elsewhere
+        if 'brand' not in product and 'title' in product:
+            title = product['title'].lower()
+            common_brands = ['epos', 'sennheiser', 'jabra', 'plantronics', 'logitech', 'cisco', 'yealink', 'poly']
+            for brand in common_brands:
+                if brand in title:
+                    product['brand'] = brand.upper()
+                    break
         
         # Extract features from lists
         feature_selectors = [
             '.product-features li',
-            '.features li',
-            '.product-info ul li',
-            '.specifications li'
+            '.features li', 
+            '.product-specs li',
+            '.specifications li',
+            'ul li'
         ]
         
         features = []
@@ -184,35 +240,72 @@ class ProductScraper:
             elements = soup.select(selector)
             for element in elements:
                 feature = element.get_text(strip=True)
-                if feature and len(feature) > 10 and len(feature) < 200:
+                # Filter for meaningful features
+                if (feature and 
+                    len(feature) > 15 and 
+                    len(feature) < 200 and
+                    not any(word in feature.lower() for word in ['cookie', 'privacy', 'terms', 'delivery', 'return'])):
                     features.append(feature)
         
         if features:
-            product['features'] = ' | '.join(features[:10])  # Limit to 10 features
+            product['features'] = ' | '.join(features[:8])  # Limit to 8 features
         
-        # Extract images
+        # Extract images - multiple approaches
         img_selectors = [
-            '.product-image-main img',
-            '.gallery-image img',
+            '.product-image img',
             '.product-media img',
+            '.gallery img',
+            '.product-photo img',
             'img[src*="product"]',
-            '.product-photo img'
+            'img[alt*="product"]',
+            '.main-image img'
         ]
         
         images = []
         for selector in img_selectors:
             img_elements = soup.select(selector)
             for img in img_elements:
-                src = img.get('src') or img.get('data-src')
-                if src and not src.startswith('data:') and 'placeholder' not in src.lower():
-                    full_url = urljoin(url, src)
-                    if full_url not in images:
-                        images.append(full_url)
+                src = img.get('src') or img.get('data-src') or img.get('data-lazy')
+                if src and not src.startswith('data:'):
+                    # Convert relative URLs to absolute
+                    if src.startswith('//'):
+                        src = 'https:' + src
+                    elif src.startswith('/'):
+                        src = urljoin(url, src)
+                    
+                    # Filter out small icons and logos
+                    if ('product' in src.lower() or 
+                        'media' in src.lower() or
+                        any(dim in src for dim in ['200', '300', '400', '500', '600'])):
+                        if src not in images:
+                            images.append(src)
         
         if images:
             product['image_url'] = images[0]
             if len(images) > 1:
-                product['additional_images'] = ' | '.join(images[1:5])  # Up to 4 additional images
+                product['additional_images'] = ' | '.join(images[1:4])
+        
+        # Set availability based on stock status
+        stock_indicators = soup.select('.stock, .availability, .in-stock, .out-of-stock')
+        for indicator in stock_indicators:
+            stock_text = indicator.get_text(strip=True).lower()
+            if 'in stock' in stock_text or 'available' in stock_text:
+                product['availability'] = 'In Stock'
+                break
+            elif 'out of stock' in stock_text or 'unavailable' in stock_text:
+                product['availability'] = 'Out of Stock'
+                break
+        
+        # Default availability if not found
+        if 'availability' not in product:
+            product['availability'] = 'Available'
+        
+        # Log what we found for debugging
+        logger.info(f"Extracted data for {url}:")
+        logger.info(f"  Title: {product.get('title', 'NOT FOUND')}")
+        logger.info(f"  Price: {product.get('price', 'NOT FOUND')}")
+        logger.info(f"  Part Number: {product.get('part_number', 'NOT FOUND')}")
+        logger.info(f"  Brand: {product.get('brand', 'NOT FOUND')}")
         
         return product
 
